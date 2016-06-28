@@ -69,12 +69,10 @@ function choo (opts) {
   }
 
   // update the DOM after every state mutation
-  // (obj, obj, obj, fn) -> null
-  function render (action, state, prev, send) {
-    if (opts.onState) opts.onState(action, state, prev, send)
-
+  // (obj, obj, obj, str, fn) -> null
+  function render (action, state, prev, name, send) {
+    if (opts.onState) opts.onState(action, state, prev, name, send)
     if (state === prev) return
-
     const newTree = _router(state.app.location, state, send, prev)
     _rootNode = yo.update(_rootNode, newTree)
   }

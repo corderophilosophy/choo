@@ -36,7 +36,7 @@ function choo (opts) {
     _store.start({ noSubscriptions: true, noReducers: true, noEffects: true })
     const state = _store.state({ state: serverState })
     const tree = _router(route, state, function () {
-      throw new Error('choo: send() cannot be called from Node')
+      assert.fail('choo: send() cannot be called from Node')
     })
     return tree.toString()
   }

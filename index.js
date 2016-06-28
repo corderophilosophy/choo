@@ -6,7 +6,6 @@ const hash = require('sheet-router/hash')
 const hashMatch = require('hash-match')
 const barracks = require('barracks')
 const assert = require('assert')
-const xtend = require('xtend')
 const yo = require('yo-yo')
 
 choo.view = yo
@@ -16,7 +15,8 @@ module.exports = choo
 // null -> fn
 function choo (opts) {
   opts = opts || {}
-  const store = barracks({ onState: render })
+
+  const _store = barracks({ onState: render })
   var _rootNode = null
   var _router = null
 
@@ -30,44 +30,41 @@ function choo (opts) {
   // render the application to a string
   // (str, obj) -> str
   function toString (route, serverState) {
-    const initialState = store.start({
-      noSubscriptions: true,
-      noReducers: true,
-      noEffects: true
-    })
-
-    const state = xtend(initialState, serverState)
+    serverState = serverState || {}
+    assert.equal(typeof route, 'string', 'choo.app.toString: route must be a string')
+    assert.equal(typeof serverState, 'object', 'choo.app.toString: serverState must be an object')
+    _store.start({ noSubscriptions: true, noReducers: true, noEffects: true })
+    const state = _store.state({ state: serverState })
     const tree = _router(route, state, function () {
-      throw new Error('send() cannot be called on the server')
+      throw new Error('choo: send() cannot be called from Node')
     })
-
     return tree.toString()
   }
 
   // start the application
   // (str?, obj?) -> DOMNode
-  function start (rootId, startOpts) {
-    if (!startOpts && typeof rootId !== 'string') {
-      startOpts = rootId
-      rootId = null
+  function start (selector, startOpts) {
+    if (!startOpts && typeof selector !== 'string') {
+      startOpts = selector
+      selector = null
     }
     startOpts = startOpts || {}
 
-    store.model(appInit(startOpts))
-    const send = store.start(startOpts)
-    const state = store.state()
-    if (rootId) {
-      document.addEventListener('DOMContentLoaded', function (event) {
-        rootId = rootId.replace(/^#/, '')
-        const oldTree = document.querySelector('#' + rootId)
-        assert.ok(oldTree, 'could not find node #' + rootId)
-        const newTree = _router(state.app.location, state, send)
-        _rootNode = yo.update(oldTree, newTree)
-      })
-    } else {
+    _store.model(appInit(startOpts))
+    const send = _store.start(startOpts)
+    const state = _store.state()
+
+    if (!selector) {
       const tree = _router(state.app.location, state, send)
       _rootNode = tree
       return tree
+    } else {
+      document.addEventListener('DOMContentLoaded', function (event) {
+        const oldTree = document.querySelector(selector)
+        assert.ok(oldTree, 'could not query selector: ' + selector)
+        const newTree = _router(state.app.location, state, send)
+        _rootNode = yo.update(oldTree, newTree)
+      })
     }
   }
 
@@ -92,30 +89,20 @@ function choo (opts) {
   // create a new model
   // (str?, obj) -> null
   function model (model) {
-    store.model(model)
+    _store.model(model)
   }
 }
 
 // initial application state model
 // obj -> obj
 function appInit (opts) {
-  const model = {
-    namespace: 'app',
-    state: {
-      location: (opts.hash === true)
-        ? hashMatch(document.location.hash)
-        : document.location.href
-    },
-    reducers: {
-      // handle href links
-      location: function setLocation (action, state) {
-        return {
-          location: action.location.replace(/#.*/, '')
-        }
-      }
+  const loc = document.location
+  const state = { location: (opts.hash) ? hashMatch(loc.hash) : loc.href }
+  const reducers = {
+    location: function setLocation (action, state) {
+      return { location: action.location.replace(/#.*/, '') }
     }
   }
-
   // if hash routing explicitly enabled, subscribe to it
   const subs = {}
   if (opts.hash === true) {
@@ -129,8 +116,12 @@ function appInit (opts) {
     if (opts.href !== false) pushLocationSub(href, 'handleHref', subs)
   }
 
-  model.subscriptions = subs
-  return model
+  return {
+    namespace: 'app',
+    subscriptions: subs,
+    reducers: reducers,
+    state: state
+  }
 
   // create a new subscription that modifies
   // 'app:location' and push it to be loaded

@@ -33,10 +33,10 @@ module.exports = {
     }
   },
   effects: {
-    error: function (action, state, send) {
+    error: function (action, state, send, done) {
       const timeout = state.errorTimeDone - Date.now()
       setTimeout(function () {
-        send('app:error:delete')
+        send('app:error:delete', done)
       }, timeout)
     }
   }
